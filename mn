@@ -1,0 +1,342 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import glob
+import re
+import string
+import argparse
+import shutil
+import datetime
+import calendar
+import subprocess
+import encodings
+import codecs
+
+NOTES_ROOT_DIR = None
+KNOWN_EXTENSIONS = ['.jpg', '.png', '.svg', '.md']
+
+def set_notes_root(dir):
+    global NOTES_ROOT_DIR
+    NOTES_ROOT_DIR = dir
+
+def default_root_dir():
+    return os.getenv('MN_ROOT', default='.')
+
+def root_dir():
+    global NOTES_ROOT_DIR
+    return NOTES_ROOT_DIR
+
+def rel_root_dir():
+    return os.path.relpath(root_dir())
+
+def perform_preflight_checks():
+    global NOTES_ROOT_DIR
+    if NOTES_ROOT_DIR is None:
+        raise Exception(f'root dir is not set')
+    os.makedirs(root_dir(), exist_ok=True)
+
+def is_note_file(path):
+    return re.match(r'^.*\.md$', path) is not None
+
+def paths_to_all_files():
+    return glob.glob(f'{root_dir()}/*')
+
+def date_filename_format():
+    return '%y-%m-%d'
+
+def one_day():
+    return datetime.timedelta(days=1)
+
+def open_file(name):
+    subprocess.run(['/usr/local/bin/code', name])
+
+def open_dir(name):
+    subprocess.run(['/usr/local/bin/code', name])
+
+def filename_from_date(date):
+    return filename_from_content(title_from_date(date))
+
+def title_from_date(date):
+    return f'# {date.strftime(date_filename_format())} {calendar.day_name[date.weekday()][:3]}'
+
+def create_date_note(date):
+    filename = f'{root_dir()}/{filename_from_date(date)}'
+    if os.path.exists(filename):
+        return filename
+    previous_date = date - one_day()
+    previous_file = f'{root_dir()}/{filename_from_date(previous_date)}'
+    if not os.path.exists(previous_file):
+        sys.stderr.write(f'{previous_file} does not exist')
+        create_date_note(previous_date)
+
+    new_content = [title_from_date(date)]
+    skip_until_next_header = False
+    with open(previous_file) as f:
+        # Skip header
+        line = f.readline()
+        for line in f:
+            line = line.strip('\n')
+
+            if '## Done' in line:
+                new_content.append('## Done')
+                new_content.append('')
+                skip_until_next_header = True
+                continue
+
+            if '## Notes' in line:
+                new_content.append('## Notes')
+                new_content.append('')
+                skip_until_next_header = True
+                continue
+
+            if skip_until_next_header and len(line) > 0 and line[0] != '#':
+                continue
+
+            if skip_until_next_header and len(line) > 0 and line[0] == '#':
+                skip_until_next_header = False
+
+            new_content.append(line)
+    with open(filename, 'w') as f:
+        f.write('\n'.join(new_content))
+    return filename
+
+def open_date_note(date):
+    filename = create_date_note(date)
+    open_file(filename)
+
+def open_root():
+    open_dir(root_dir())
+
+def open_yesterdays_note():
+    yesterday = datetime.date.today() - one_day()
+    open_date_note(yesterday)
+
+def open_todays_note():
+    today = datetime.date.today()
+    open_date_note(today)
+
+def open_tomorrows_note():
+    tomorrow = datetime.date.today() + one_day()
+    open_date_note(tomorrow)
+
+# Return the first non-empty line of a file
+def get_first_non_empty_line(filename, skip_front_matter=True):
+    front_matter_began = False
+    front_matter_ended = False
+    with open(filename) as f:
+        line = ''
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            if skip_front_matter and line == '---' and not front_matter_began:
+                front_matter_began = True
+                continue
+            if skip_front_matter and line == '---' and front_matter_began and not front_matter_ended:
+                front_matter_ended = True
+                continue
+            if skip_front_matter and front_matter_began and not front_matter_ended:
+                continue
+            break
+        return line
+
+def filename_from_content(first_non_empty_line):
+    accents = {
+        'á': 'a',
+        'à': 'a',
+        'ã': 'a',
+        'â': 'a',
+        'é': 'e',
+        'ê': 'e',
+        'í': 'i',
+        'ó': 'o',
+        'õ': 'o',
+        'ö': 'o',
+        'ô': 'o',
+        'ú': 'u',
+        'ü': 'u',
+    }
+    def normalize_rune(r):
+        r = r.lower()
+        if r in accents:
+            r = accents[r]
+        return r
+
+    current_word = ''
+    words = []
+    for c in first_non_empty_line:
+        c = normalize_rune(c)
+        if c in string.ascii_letters + string.digits:
+            current_word += c
+        else:
+            if current_word:
+                words.append(current_word)
+            current_word = ''
+
+    if current_word:
+        words.append(current_word)
+    current_word = ''
+    new_name = '-'.join(words) + '.md'
+
+    return new_name
+
+def is_filename_valid(filename):
+    return re.match(r'[a-z0-9]+(-[a-z0-9]+)*\.md', filename)
+
+def file_has_title(first_line):
+    first_line = first_line.strip()
+    return len(first_line) > 3 and first_line.strip()[:2] == '# '
+
+def get_title_from_filename(filename):
+    name, extension = os.path.splitext(filename)
+    words = [w[0].upper() + w[1:] for w in name.split('-')]
+    return ' '.join(words)
+
+def lint_note_file(path):
+    first_non_empty_line = get_first_non_empty_line(path)
+    filename = os.path.basename(path)
+    if not file_has_title(first_non_empty_line):
+        print(f'error: "{filename}" title should be {get_title_from_filename(filename)}')
+    else:
+        corrected_filename = filename_from_content(first_non_empty_line)
+        if not is_filename_valid(corrected_filename):
+            print(f'error: "{filename}" has an incorrect name')
+        elif filename != corrected_filename:
+            print(f'error: "{filename}" should be called {rel_root_dir()}/{corrected_filename}')
+    has_front_matter = ('---' == get_first_non_empty_line(path, skip_front_matter=False))
+    if has_front_matter:
+        print(f'error: "{filename}" has front matter')
+
+def file_has_extension(path):
+    _, ext = os.path.splitext(path)
+    return ext != ''
+
+def file_begins_with_many_empty_lines(path):
+    with open(path) as f:
+        blank_line_counter = 0
+        line = f.readline().strip()
+        # skip at most 10 blank lines
+        while not line and blank_line_counter < 10:
+            blank_line_counter +=1
+            line = f.readline().strip()
+
+        if line:
+            return False
+        else:
+            return True
+
+def file_has_known_extension(path):
+    _, ext = os.path.splitext(path)
+    global KNOWN_EXTENSIONS
+    return ext in KNOWN_EXTENSIONS
+
+def file_is_text(path):
+    encoding = 'utf-8'
+    try:
+        fh = codecs.open(path, 'r', encoding)
+        fh.read(100)
+        return True
+    except UnicodeDecodeError:
+        return False
+
+def lint_non_note_file(path):
+    if not file_has_extension(path):
+        print(f'{path} has no extension')
+    if not file_has_known_extension(path):
+        print(f'{path} has a strange extension')
+    if file_is_text(path) and file_begins_with_many_empty_lines(path):
+        print(f'{path} seems empty')
+
+def lint():
+    for path in paths_to_all_files():
+        if is_note_file(path):
+            lint_note_file(path)
+        else:
+            lint_non_note_file(path)
+
+def fix():
+    paths_to_remove = []
+    for path in paths_to_all_files():
+        if not is_note_file(path):
+            if file_has_known_extension(path):
+                continue
+            else:
+                basename = os.path.basename(path)
+                response = input(f"type {basename}'s first letter to remove it: ")
+                if basename[0] == response.strip():
+                    paths_to_remove.append(path)
+                continue
+        first_non_empty_line = get_first_non_empty_line(path)
+        filename = os.path.basename(path)
+        if not file_has_title(first_non_empty_line):
+            title = get_title_from_filename(filename)
+            with open(path) as f:
+                content = f.read()
+            with open(path, 'w') as f:
+                f.write(f'# {title}\n\n{content}')
+        corrected_filename = filename_from_content(first_non_empty_line)
+        if not is_filename_valid(corrected_filename):
+            print(f'error: "{filename}" cannot be fixed: corrected filename would be "{corrected_filename}"')
+        elif filename != corrected_filename:
+            correct_path = f'{root_dir()}/{corrected_filename}'
+            if os.path.exists(correct_path):
+                print(f'error: cannot fix "{filename}": {correct_path} exists')
+            else:
+                os.rename(path, correct_path)
+    for path in paths_to_remove:
+        os.unlink(path)
+
+def print_all_notes():
+    print('\n'.join([p for p in paths_to_all_files() if is_note_file(p)]))
+
+def print_root():
+    print(root_dir())
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Stupidly simple personal notes manager',
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+
+    # TODO: make command class
+    commands = {
+        'fix': "try to fix problems with the notes",
+        'lint': "print problems with the notes",
+        'open-root': "open your note's root directory",
+        'list': 'print the path of all notes',
+        'print-root': 'print root directory for the notes',
+        'today': "open today's note",
+        'tomorrow': "open tomorrow's note",
+        'yesterday': "open yesterday's note",
+    }
+
+    longest_name_length = max([len(name) for name in commands])
+    help_messages = [f'{name.ljust(longest_name_length+3)} {help}' for name, help in commands.items()]
+
+    parser.add_argument('--root', default=default_root_dir(), help='root dir for your notes')
+    parser.add_argument('command', metavar='COMMAND', help='\n'.join(help_messages), choices=list(commands))
+    args = parser.parse_args()
+
+    if args.root:
+        set_notes_root(args.root)
+    else:
+        set_notes_root(default_root_dir())
+
+    perform_preflight_checks()
+
+    command_to_function = {
+        'fix': fix,
+        'lint': lint,
+        'open-root': open_root,
+        'list': print_all_notes,
+        'print-root': print_root,
+        'today': open_todays_note,
+        'tomorrow': open_tomorrows_note,
+        'yesterday': open_yesterdays_note,
+    }
+
+    command_to_function[args.command]()
+
+if __name__ == '__main__':
+    main()
