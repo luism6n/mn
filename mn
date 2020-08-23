@@ -12,8 +12,11 @@ import calendar
 import subprocess
 import encodings
 import codecs
+import urllib.request
+import urllib.error
 
 NOTES_ROOT_DIR = None
+USE_INTERNET = False
 KNOWN_EXTENSIONS = ['.jpg', '.png', '.svg', '.md']
 
 def set_notes_root(dir):
@@ -193,6 +196,31 @@ def get_title_from_filename(filename):
     words = [w[0].upper() + w[1:] for w in name.split('-')]
     return ' '.join(words)
 
+def get_references_in_note(path):
+    with open(path) as f:
+        content = f.read()
+
+    return re.findall(r'\[.*\]\((\S*)\)', content)
+
+def is_url(s):
+    try:
+        req = urllib.request.Request(s, headers={'User-Agent': 'Mozilla/5.0'})
+        return urllib.request.urlopen(req).getcode() in [200, 301, 302, 303]
+    except (ValueError, urllib.error.HTTPError, urllib.error.URLError):
+        return False
+
+def get_invalid_references_in_note(path):
+    invalid = []
+    references = get_references_in_note(path)
+    for reference in references:
+        if not reference.endswith('.md') and not USE_INTERNET:
+            continue
+        if is_url(reference):
+            continue
+        if not os.path.exists(f'{root_dir()}/{reference}'):
+            invalid.append(reference)
+    return invalid
+
 def lint_note_file(path):
     first_non_empty_line = get_first_non_empty_line(path)
     filename = os.path.basename(path)
@@ -207,6 +235,9 @@ def lint_note_file(path):
     has_front_matter = ('---' == get_first_non_empty_line(path, skip_front_matter=False))
     if has_front_matter:
         print(f'error: "{filename}" has front matter')
+    invalid_references = get_invalid_references_in_note(path)
+    if invalid_references:
+        print(f'error: "{filename}" has invalid references: {", ".join(invalid_references)}')
 
 def file_has_extension(path):
     _, ext = os.path.splitext(path)
@@ -315,6 +346,7 @@ def main():
     help_messages = [f'{name.ljust(longest_name_length+3)} {help}' for name, help in commands.items()]
 
     parser.add_argument('--root', default=default_root_dir(), help='root dir for your notes')
+    parser.add_argument('--use-internet', default=False, help='use the internet when linting references', action='store_true')
     parser.add_argument('command', metavar='COMMAND', help='\n'.join(help_messages), choices=list(commands))
     args = parser.parse_args()
 
@@ -322,6 +354,10 @@ def main():
         set_notes_root(args.root)
     else:
         set_notes_root(default_root_dir())
+
+    if args.use_internet:
+        global USE_INTERNET
+        USE_INTERNET = args.use_internet
 
     perform_preflight_checks()
 
