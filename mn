@@ -93,7 +93,9 @@ def is_url(s):
 
 def git_sync():
     logger.info('syncing to remote')
+    previous_dir = os.getcwd()
     try:
+        os.chdir(MN_ROOT)
         run('git pull --ff-only origin master')
         run('git add *')
         run('git commit -m "mn update"')
@@ -101,7 +103,8 @@ def git_sync():
     except subprocess.CalledProcessError as e:
         logger.error(e)
         logger.error(e.stderr)
-        return
+    finally:
+        os.chdir(previous_dir)
 
     logger.info('done')
 
