@@ -149,7 +149,7 @@ def grep_done_tags():
     print_grep_results(lines)
 
 def print_cronjob_line():
-    this_script_path = os.path.dirname(os.path.realpath(__file__))
+    this_script_path = os.path.realpath(__file__)
     print(f'*/5 * * * * {this_script_path} sync 2>&1 > /dev/null')
 
 def main():
