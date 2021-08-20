@@ -161,11 +161,11 @@ def sort_by_date(grep_results):
 
 
 def grep_todo_tags():
-    print_grep_results(grep(r"\W#todo\W"))
+    print_grep_results(grep(r"#todo"))
 
 
 def grep_done_tags():
-    lines = sort_by_date(grep(r"\W#done\W"))
+    lines = sort_by_date(grep(r"#done"))
     print_grep_results(lines)
 
 
