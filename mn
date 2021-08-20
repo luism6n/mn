@@ -10,6 +10,7 @@ import urllib.error
 import collections
 import logging
 import shlex
+import string
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)-8s %(message)s", datefmt="%Y/%m/%d %H:%M:%S"
@@ -32,6 +33,9 @@ class colors:
 MN_ROOT = None
 USE_INTERNET = False
 MN_EDITOR = None
+FILENAME_ALLOWED_CHARS = set(
+    "abcdefghijklmnopqrstuvxzABCDEFGHIJKLMNOPQRSTUVXZáéíóúêôâãõçÁÉÍÓÚÊÔÂÃÕÇ"
+)
 
 
 def run(command):
@@ -176,6 +180,69 @@ def print_cronjob_line():
     )
 
 
+def get_title(note):
+    with open(note) as f:
+        for line in f:
+            line = line.strip()
+            if not line.startswith("# "):
+                continue
+            return line[2:]
+    # no title found
+    return None
+
+
+def filpath_from_title(note, title):
+    filename = ""
+    for char in title:
+        if char not in FILENAME_ALLOWED_CHARS:
+            filename += "-"
+        else:
+            filename += char
+
+    directory = os.path.dirname(os.path.realpath(note))
+    return f"{directory}/{filename}.md"
+
+
+def title_from_filename(filename):
+    if not filename.endswith(".md"):
+        logger.error(f"tried to get title for non markdown file {filename}")
+        return None
+    title = os.path.basename(filename)
+    title = title.replace("-", " ")
+    title = title[:-3]  # strip .md
+    return f"{title}"
+
+
+def rename_note(note, filename):
+    if os.path.realpath(note) == os.path.realpath(filename):
+        return
+    logger.debug(f"renaming {note} to {filename}")
+    os.rename(note, filename)
+
+
+def add_title(title, note):
+    logger.debug(f'adding title "{title}" to {note}')
+    with open(note) as f:
+        content = f.read()
+    content = f"# {title}\n\n{content}"
+    with open(note, "w") as f:
+        f.write(content)
+
+
+def fix():
+    for note in all_notes():
+        title = get_title(note)
+        if title:
+            filename = filpath_from_title(note, title)
+            rename_note(note, filename)
+            continue
+
+        title = title_from_filename(note)
+        if title:
+            add_title(title, note)
+            continue
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Stupidly simple personal notes manager",
@@ -191,6 +258,7 @@ def main():
         "todo": "grep all #todo tags in markdown files",
         "done": "grep all #done tags in markdown files",
         "cronjob": "print cronjob line to sync notes periodically",
+        "fix": "rename file to match title or add title to match filename",
     }
 
     longest_name_length = max([len(name) for name in commands])
@@ -231,6 +299,7 @@ def main():
         "todo": grep_todo_tags,
         "done": grep_done_tags,
         "cronjob": print_cronjob_line,
+        "fix": fix,
     }
 
     command_to_function[args.command]()
