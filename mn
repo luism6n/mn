@@ -11,31 +11,38 @@ import collections
 import logging
 import shlex
 
-logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y/%m/%d %H:%M:%S')
+logging.basicConfig(
+    format="%(asctime)s %(levelname)-8s %(message)s", datefmt="%Y/%m/%d %H:%M:%S"
+)
 logger = logging.getLogger(__name__)
 
+
 class colors:
-    PINK = '\033[95m'
-    BLUE = '\033[94m'
-    CYAN = '\033[96m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-    ENDC = '\033[0m'
+    PINK = "\033[95m"
+    BLUE = "\033[94m"
+    CYAN = "\033[96m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    RED = "\033[91m"
+    BOLD = "\033[1m"
+    UNDERLINE = "\033[4m"
+    ENDC = "\033[0m"
+
 
 MN_ROOT = None
 USE_INTERNET = False
 MN_EDITOR = None
 
+
 def run(command):
-    logger.info(f'running {shlex.quote(command)}')
+    logger.info(f"running {shlex.quote(command)}")
     split = shlex.split(command)
     subprocess.check_call(split)
 
+
 def rel_root_dir():
     return os.path.relpath(MN_ROOT)
+
 
 def init(args):
     global MN_ROOT, MN_EDITOR
@@ -43,27 +50,29 @@ def init(args):
     if args.editor:
         MN_EDITOR = args.editor
     else:
-        MN_EDITOR = os.getenv('MN_EDITOR')
+        MN_EDITOR = os.getenv("MN_EDITOR")
     if MN_EDITOR is None:
-        logger.error('editor not set')
+        logger.error("editor not set")
         return False
 
     if args.root:
         MN_ROOT = args.root
     else:
-        MN_ROOT = os.getenv('MN_ROOT')
+        MN_ROOT = os.getenv("MN_ROOT")
     if MN_ROOT is None:
-        logger.error('root dir not set')
+        logger.error("root dir not set")
         return False
 
     if not os.path.exists(MN_ROOT):
-        logger.error(f'root dir {MN_ROOT} does not exist')
+        logger.error(f"root dir {MN_ROOT} does not exist")
         return False
     return True
 
+
 def all_notes():
-    for note in glob.glob(f'{MN_ROOT}/**/*.md', recursive=True):
+    for note in glob.glob(f"{MN_ROOT}/**/*.md", recursive=True):
         yield os.path.relpath(note)
+
 
 def open_in_editor(name):
     try:
@@ -72,17 +81,21 @@ def open_in_editor(name):
         logger.error(f'could not open "{name}"')
         logger.error(e.stderr)
 
+
 def open_root():
     open_in_editor(MN_ROOT)
 
+
 def is_filename_valid(filename):
-    return re.match(r'[a-z0-9çáàãâéêíóõöôúü]+(-[a-z0-9çáàãâéêíóõöôúü]+)*\.md', filename)
+    return re.match(r"[a-z0-9çáàãâéêíóõöôúü]+(-[a-z0-9çáàãâéêíóõöôúü]+)*\.md", filename)
+
 
 def get_references_in_note(path):
     with open(path) as f:
         content = f.read()
 
-    return re.findall(r'\[.*\]\((\S*)\)', content)
+    return re.findall(r"\[.*\]\((\S*)\)", content)
+
 
 def is_url(s):
     try:
@@ -91,109 +104,132 @@ def is_url(s):
     except (ValueError, urllib.error.HTTPError, urllib.error.URLError):
         return False
 
+
 def git_sync():
-    logger.info('syncing to remote')
+    logger.info("syncing to remote")
     previous_dir = os.getcwd()
     try:
         os.chdir(MN_ROOT)
-        run('git pull --ff-only origin master')
-        run('git add *')
+        run("git pull --ff-only origin master")
+        run("git add *")
         run('git commit -m "mn update"')
-        run('git push origin master')
+        run("git push origin master")
     except subprocess.CalledProcessError as e:
         logger.error(e)
         logger.error(e.stderr)
     finally:
         os.chdir(previous_dir)
 
-    logger.info('done')
+    logger.info("done")
+
 
 def print_all_notes():
     for note in all_notes():
         print(note)
 
+
 def print_root():
     print(MN_ROOT)
 
+
 def grep(text):
-    GrepResult = collections.namedtuple('GrepResult', ['file', 'line_number', 'content'])
+    GrepResult = collections.namedtuple(
+        "GrepResult", ["file", "line_number", "content"]
+    )
     for note in all_notes():
         with open(note) as f:
             for n, l in enumerate(f):
-                if re.search(f'{text}', l):
-                    yield GrepResult(note, n+1, l.strip())
+                if re.search(f"{text}", l):
+                    yield GrepResult(note, n + 1, l.strip())
+
 
 def print_grep_results(results):
     for note, line_number, line in results:
-        print(f'{colors.BOLD}{colors.CYAN}{line}{colors.ENDC}')
-        print(f'{note}:{line_number}')
+        print(f"{colors.BOLD}{colors.CYAN}{line}{colors.ENDC}")
+        print(f"{note}:{line_number}")
+
 
 def sort_by_date(grep_results):
     def extract_date_from_grep_results(result):
-        match = re.search(r'\d\d-\d\d-\d\d', result.content)
+        match = re.search(r"\d\d-\d\d-\d\d", result.content)
         if match:
             return match.group(0)
         else:
-            return ''
+            return ""
+
     return sorted(grep_results, key=extract_date_from_grep_results)
 
+
 def grep_todo_tags():
-    print_grep_results(grep(r'\W#todo\W'))
+    print_grep_results(grep(r"\W#todo\W"))
+
 
 def grep_done_tags():
-    lines = sort_by_date(grep(r'\W#done\W'))
+    lines = sort_by_date(grep(r"\W#done\W"))
     print_grep_results(lines)
+
 
 def print_cronjob_line():
     this_script_path = os.path.realpath(__file__)
-    print(f'*/5 * * * * {this_script_path} sync 2>&1 > /dev/null')
+    print(f"*/5 * * * * {this_script_path} sync 2>&1 > /dev/null")
+
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Stupidly simple personal notes manager',
+        description="Stupidly simple personal notes manager",
         formatter_class=argparse.RawTextHelpFormatter,
     )
 
     # TODO: make command class
     commands = {
-        'open-root': "open your note's root directory",
-        'list': 'print the path of all notes',
-        'print-root': 'print root directory for the notes',
-        'sync': 'commit and push (if network enabled) notes root directory',
-        'todo': 'grep all #todo tags in markdown files',
-        'done': 'grep all #done tags in markdown files',
-        'cronjob': 'print cronjob line to sync notes periodically',
+        "open-root": "open your note's root directory",
+        "list": "print the path of all notes",
+        "print-root": "print root directory for the notes",
+        "sync": "commit and push (if network enabled) notes root directory",
+        "todo": "grep all #todo tags in markdown files",
+        "done": "grep all #done tags in markdown files",
+        "cronjob": "print cronjob line to sync notes periodically",
     }
 
     longest_name_length = max([len(name) for name in commands])
-    help_messages = [f'{name.ljust(longest_name_length+3)} {help}' for name, help in commands.items()]
+    help_messages = [
+        f"{name.ljust(longest_name_length+3)} {help}" for name, help in commands.items()
+    ]
 
-    parser.add_argument('--root', default=MN_ROOT, help='root dir for your notes')
-    parser.add_argument('--editor', help='editor to open notes')
-    parser.add_argument('-l', '--log-level', choices=['debug', 'info', 'error'], default='debug')
-    parser.add_argument('command', metavar='COMMAND', help='\n'.join(help_messages), choices=list(commands))
+    parser.add_argument("--root", default=MN_ROOT, help="root dir for your notes")
+    parser.add_argument("--editor", help="editor to open notes")
+    parser.add_argument(
+        "-l", "--log-level", choices=["debug", "info", "error"], default="debug"
+    )
+    parser.add_argument(
+        "command",
+        metavar="COMMAND",
+        help="\n".join(help_messages),
+        choices=list(commands),
+    )
     args = parser.parse_args()
 
-    logger.setLevel({
-        'debug': logging.DEBUG,
-        'info': logging.INFO,
-        'error': logging.ERROR
-    }[args.log_level])
+    logger.setLevel(
+        {"debug": logging.DEBUG, "info": logging.INFO, "error": logging.ERROR}[
+            args.log_level
+        ]
+    )
 
-    logger.debug(f'arguments passed: {args}')
+    logger.debug(f"arguments passed: {args}")
     init(args)
 
     command_to_function = {
-        'open-root': open_root,
-        'list': print_all_notes,
-        'print-root': print_root,
-        'sync': git_sync,
-        'todo': grep_todo_tags,
-        'done': grep_done_tags,
-        'cronjob': print_cronjob_line,
+        "open-root": open_root,
+        "list": print_all_notes,
+        "print-root": print_root,
+        "sync": git_sync,
+        "todo": grep_todo_tags,
+        "done": grep_done_tags,
+        "cronjob": print_cronjob_line,
     }
 
     command_to_function[args.command]()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
