@@ -10,6 +10,7 @@ positional arguments:
                         todo          grep all #todo tags in markdown files
                         done          grep all #done tags in markdown files
                         cronjob       print cronjob line to sync notes periodically
+                        fix           rename file to match title or add title to match filename
 
 optional arguments:
   -h, --help            show this help message and exit
