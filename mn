@@ -90,25 +90,6 @@ def open_root():
     open_in_editor(MN_ROOT)
 
 
-def is_filename_valid(filename):
-    return re.match(r"[a-z0-9çáàãâéêíóõöôúü]+(-[a-z0-9çáàãâéêíóõöôúü]+)*\.md", filename)
-
-
-def get_references_in_note(path):
-    with open(path) as f:
-        content = f.read()
-
-    return re.findall(r"\[.*\]\((\S*)\)", content)
-
-
-def is_url(s):
-    try:
-        urllib.request.Request(s)
-        return True
-    except (ValueError, urllib.error.HTTPError, urllib.error.URLError):
-        return False
-
-
 def git_sync():
     logger.info("syncing to remote")
     previous_dir = os.getcwd()
