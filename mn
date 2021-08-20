@@ -171,7 +171,9 @@ def grep_done_tags():
 
 def print_cronjob_line():
     this_script_path = os.path.realpath(__file__)
-    print(f"*/5 * * * * {this_script_path} sync 2>&1 > /dev/null")
+    print(
+        f"*/5 * * * * {this_script_path} sync --root {MN_ROOT} --editor {MN_EDITOR} 2>&1 > /dev/null"
+    )
 
 
 def main():
@@ -196,7 +198,7 @@ def main():
         f"{name.ljust(longest_name_length+3)} {help}" for name, help in commands.items()
     ]
 
-    parser.add_argument("--root", default=MN_ROOT, help="root dir for your notes")
+    parser.add_argument("--root", help="root dir for your notes")
     parser.add_argument("--editor", help="editor to open notes")
     parser.add_argument(
         "-l", "--log-level", choices=["debug", "info", "error"], default="debug"
@@ -217,6 +219,9 @@ def main():
 
     logger.debug(f"arguments passed: {args}")
     init(args)
+    logger.debug(f"parameters used:")
+    logger.debug(f"MN_ROOT: {MN_ROOT}")
+    logger.debug(f"MN_EDITOR: {MN_EDITOR}")
 
     command_to_function = {
         "open-root": open_root,
