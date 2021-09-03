@@ -5,12 +5,9 @@ import glob
 import re
 import argparse
 import subprocess
-import urllib.request
-import urllib.error
 import collections
 import logging
 import shlex
-import string
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)-8s %(message)s", datefmt="%Y/%m/%d %H:%M:%S"
@@ -156,6 +153,7 @@ def grep_done_tags():
 
 def print_cronjob_line():
     this_script_path = os.path.realpath(__file__)
+    print('MAILTO=""')
     print(
         f"*/5 * * * * {this_script_path} sync --root {MN_ROOT} --editor {MN_EDITOR} 2>&1 > /dev/null"
     )
