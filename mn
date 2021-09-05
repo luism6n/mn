@@ -31,7 +31,7 @@ MN_ROOT = None
 USE_INTERNET = False
 MN_EDITOR = None
 FILENAME_ALLOWED_CHARS = set(
-    "abcdefghijklmnopqrstuvxzABCDEFGHIJKLMNOPQRSTUVXZáéíóúêôâãõçÁÉÍÓÚÊÔÂÃÕÇ"
+    "abcdefghijklmnopqrstuvxwyzABCDEFGHIJKLMNOPQRSTUVXWYZáéíóúêôâãõçÁÉÍÓÚÊÔÂÃÕÇ"
 )
 
 
